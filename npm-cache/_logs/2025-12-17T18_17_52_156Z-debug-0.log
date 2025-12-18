@@ -1,0 +1,39 @@
+0 verbose cli D:\Program Files\nodejs\node.exe D:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.8.2
+2 info using node@v20.19.6
+3 silly config load:file:D:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:F:\桌面\CampusSmartMaintenanceCenter-main (1)\.npmrc
+5 silly config load:file:C:\Users\xjz20\.npmrc
+6 silly config load:file:D:\Program Files\nodejs\node_global\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install"
+9 verbose logfile logs-max:10 dir:F:\桌面\CampusSmartMaintenanceCenter-main (1)\npm-cache\_logs\2025-12-17T18_17_52_156Z-
+10 verbose logfile F:\桌面\CampusSmartMaintenanceCenter-main (1)\npm-cache\_logs\2025-12-17T18_17_52_156Z-debug-0.log
+11 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+12 silly logfile done cleaning log files
+13 silly idealTree buildDeps
+14 silly reify moves {}
+15 verbose stack Error: Could not read package.json: Error: ENOENT: no such file or directory, open 'F:\桌面\CampusSmartMaintenanceCenter-main (1)\package.json'
+15 verbose stack     at async open (node:internal/fs/promises:639:25)
+15 verbose stack     at async readFile (node:internal/fs/promises:1246:14)
+15 verbose stack     at async read (D:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\package-json\lib\read-package.js:9:18)
+15 verbose stack     at async PackageJson.load (D:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\package-json\lib\index.js:130:31)
+15 verbose stack     at async PackageJson.normalize (D:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\package-json\lib\index.js:116:5)
+15 verbose stack     at async runScript (D:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\run-script\lib\run-script.js:11:28)
+15 verbose stack     at async Install.exec (D:\Program Files\nodejs\node_modules\npm\lib\commands\install.js:163:9)
+15 verbose stack     at async Npm.exec (D:\Program Files\nodejs\node_modules\npm\lib\npm.js:207:9)
+15 verbose stack     at async module.exports (D:\Program Files\nodejs\node_modules\npm\lib\cli\entry.js:74:5)
+16 error code ENOENT
+17 error syscall open
+18 error path F:\桌面\CampusSmartMaintenanceCenter-main (1)\package.json
+19 error errno -4058
+20 error enoent Could not read package.json: Error: ENOENT: no such file or directory, open 'F:\桌面\CampusSmartMaintenanceCenter-main (1)\package.json'
+21 error enoent This is related to npm not being able to find a file.
+21 error enoent
+22 verbose cwd F:\桌面\CampusSmartMaintenanceCenter-main (1)
+23 verbose os Windows_NT 10.0.26100
+24 verbose node v20.19.6
+25 verbose npm  v10.8.2
+26 verbose exit -4058
+27 verbose code -4058
+28 error A complete log of this run can be found in: F:\桌面\CampusSmartMaintenanceCenter-main (1)\npm-cache\_logs\2025-12-17T18_17_52_156Z-debug-0.log

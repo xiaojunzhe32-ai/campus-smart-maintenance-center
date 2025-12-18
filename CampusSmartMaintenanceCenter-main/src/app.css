@@ -1,0 +1,7 @@
+html {
+  font-size: 16px; /* 改这里就能统一调整所有字体 */
+}
+
+body {
+  font-size: 1rem; /* 等于 html 的 font-size */
+}
