@@ -133,11 +133,22 @@ const UserManagement = () => {
 
   // 处理搜索
   const handleSearch = (value) => {
-    setSearchKeyword(value);
+    const keyword = value ? value.trim() : '';
+    setSearchKeyword(keyword);
     const filters = {};
-    if (value) {
-      filters[searchField] = value;
+    if (keyword) {
+      // 根据选择的搜索字段设置不同的参数
+      // 后端支持 keyword（通用搜索，支持昵称、用户ID、电话）、name（姓名）、userId（用户ID）
+      if (searchField === 'name') {
+        filters.name = keyword;
+      } else if (searchField === 'id') {
+        filters.userId = keyword;
+      } else {
+        // 默认使用 keyword 进行通用搜索（支持昵称、用户ID、电话号码等）
+        filters.keyword = keyword;
+      }
     }
+    console.log('搜索用户，关键词:', keyword, '筛选条件:', filters, '搜索字段:', searchField);
     
     if (currentUserType === 'students') {
       loadStudents(filters);
@@ -330,13 +341,13 @@ const UserManagement = () => {
                 allowClear
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                onPressEnter={handleSearch}
+                onPressEnter={(e) => handleSearch(e.target.value)}
                 size="middle"
               />
               <Button 
                 type="primary" 
                 icon={<SearchOutlined />} 
-                onClick={handleSearch}
+                onClick={() => handleSearch(searchKeyword)}
                 size="middle"
               >
                 搜索

@@ -1,6 +1,5 @@
 // src/services/statisticsService.js
 import api from '../services/api';
-import { message } from 'antd';
 
 // 统一的响应处理函数
 const handleApiResponse = async (apiCall) => {
@@ -13,62 +12,10 @@ const handleApiResponse = async (apiCall) => {
       throw new Error(response?.message || '请求失败');
     }
   } catch (error) {
-    // 如果是 JSON 解析错误，说明返回了非 JSON 数据
-    if (error instanceof SyntaxError) {
-      console.warn('API 返回了非 JSON 数据，使用模拟数据');
-      return null;
-    }
+    // 直接向上抛出，由调用方决定如何处理
     throw error;
   }
 };
-
-// 模拟数据作为 fallback - 确保格式正确
-export const mockCategoryData = [
-  { type: '水电维修', value: 45 },
-  { type: '网络故障', value: 30 },
-  { type: '家具维修', value: 25 },
-  { type: '电器故障', value: 20 },
-  { type: '公共设施', value: 15 },
-];
-
-export const mockLocationData = [
-  { location: '3栋502寝室', count: 12 },
-  { location: '教学楼A201', count: 8 },
-  { location: '5栋3楼走廊', count: 7 },
-  { location: '7栋312寝室', count: 6 },
-  { location: '图书馆2楼', count: 5 },
-  { location: '食堂1楼', count: 4 },
-  { location: '体育馆', count: 3 },
-  { location: '行政楼', count: 2 },
-];
-
-export const mockRatingData = [
-  { id: 1, name: '张师傅', rating: 4.9, completedOrders: 45 },
-  { id: 2, name: '李师傅', rating: 4.8, completedOrders: 38 },
-  { id: 3, name: '王师傅', rating: 4.7, completedOrders: 32 },
-  { id: 4, name: '赵师傅', rating: 4.6, completedOrders: 28 },
-  { id: 5, name: '钱师傅', rating: 4.5, completedOrders: 25 },
-];
-
-// 新增：工单状态模拟数据
-export const mockStatusData = [
-  { status: 'pending', value: 15 },
-  { status: 'processing', value: 8 },
-  { status: 'completed', value: 25 },
-  { status: 'to_be_evaluated', value: 12 },
-  { status: 'closed', value: 30 },
-  { status: 'rejected', value: 5 },
-];
-
-// 新增：月度统计模拟数据（最近六个月）
-export const mockMonthlyData = [
-  { month: '1月', orders: 120 },
-  { month: '2月', orders: 98 },
-  { month: '3月', orders: 156 },
-  { month: '4月', orders: 145 },
-  { month: '5月', orders: 178 },
-  { month: '6月', orders: 165 },
-];
 
 export const statisticsService = {
   // 获取报修分类统计
@@ -78,19 +25,39 @@ export const statisticsService = {
       
       if (data) {
         // 转换数据格式以适配图表组件
-        const categoryData = Array.isArray(data) ? data.map(item => ({
-          type: item.category || item.name || item.type,
-          value: Number(item.count || item.value || 0)
-        })) : [];
+        const categoryData = Array.isArray(data) ? data.map(item => {
+          // 后端视图返回的详细字段：
+          // category, name, type, count/value, totalTickets, completedTickets, ratedTickets, avgRating
+          const total = Number(
+            item.totalTickets ||
+            item.total_tickets ||
+            item.count ||
+            item.value ||
+            0
+          );
+          const avgRating = typeof item.avgRating !== 'undefined'
+            ? Number(item.avgRating)
+            : (item.avg_rating ? Number(item.avg_rating) : 0);
+          const completed = Number(item.completedTickets || item.completed_tickets || 0);
+          const rated = Number(item.ratedTickets || item.rated_tickets || 0);
+
+          return {
+            type: item.category || item.name || item.type,
+            value: total,
+            totalTickets: total,
+            avgRating,
+            completedTickets: completed,
+            ratedTickets: rated,
+          };
+        }) : [];
         
-        return categoryData.length > 0 ? categoryData : mockCategoryData;
+        return categoryData;
       }
       
-      return mockCategoryData;
+      return [];
     } catch (error) {
       console.error('获取分类统计失败:', error);
-      message.warning('使用模拟数据展示（分类统计）');
-      return mockCategoryData;
+      return [];
     }
   },
 
@@ -106,14 +73,13 @@ export const statisticsService = {
           count: Number(item.count || item.value || 0)
         })) : [];
         
-        return locationData.length > 0 ? locationData : mockLocationData;
+        return locationData;
       }
       
-      return mockLocationData;
+      return [];
     } catch (error) {
       console.error('获取位置统计失败:', error);
-      message.warning('使用模拟数据展示（位置统计）');
-      return mockLocationData;
+      return [];
     }
   },
 
@@ -131,14 +97,13 @@ export const statisticsService = {
           completedOrders: Number(item.completedOrders || item.count || 0)
         })) : [];
         
-        return ratingData.length > 0 ? ratingData : mockRatingData;
+        return ratingData;
       }
       
-      return mockRatingData;
+      return [];
     } catch (error) {
       console.error('获取评分统计失败:', error);
-      message.warning('使用模拟数据展示（评分统计）');
-      return mockRatingData;
+      return [];
     }
   },
 
@@ -157,7 +122,7 @@ export const statisticsService = {
     } catch (error) {
       console.error('获取总体统计失败:', error);
       return {
-        totalRepairs: mockCategoryData.reduce((sum, item) => sum + item.value, 0),
+        totalRepairs: 0,
         avgProcessingTime: '2.3 天',
         userSatisfaction: '94.5%'
       };
@@ -176,14 +141,13 @@ export const statisticsService = {
           value: Number(item.count || item.value || 0)
         })) : [];
         
-        return statusData.length > 0 ? statusData : mockStatusData;
+        return statusData;
       }
       
-      return mockStatusData;
+      return [];
     } catch (error) {
       console.error('获取工单状态统计失败:', error);
-      message.warning('使用模拟数据展示（工单状态统计）');
-      return mockStatusData;
+      return [];
     }
   },
 
@@ -200,22 +164,14 @@ export const statisticsService = {
           month: item.month || item.date,
           orders: Number(item.count || item.orders || item.value || 0),
         }));
-
-        return monthlyData.length > 0 ? monthlyData : mockMonthlyData;
+        
+        return monthlyData;
       }
 
-      return mockMonthlyData;
+      return [];
     } catch (error) {
       console.error('获取月度统计失败:', error);
-      message.warning('使用模拟数据展示（月度统计）');
-      return mockMonthlyData;
+      return [];
     }
   },
-
-  // 导出模拟数据用于检查
-  mockCategoryData,
-  mockLocationData,
-  mockRatingData,
-  mockStatusData, // 新增：导出状态模拟数据
-  mockMonthlyData // 新增：导出月度模拟数据
 };

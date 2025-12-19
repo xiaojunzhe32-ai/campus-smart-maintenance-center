@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Tag, Button, Space, Select, Input, 
-  Modal, Form, message, Card, Row, Col 
+  Modal, Form, message, Card, Row, Col, Switch 
 } from 'antd';
 import { 
   SearchOutlined, UserOutlined, CloseOutlined, CheckOutlined 
@@ -18,6 +18,7 @@ const RepairOrderList = ({ onRefresh }) => {
     status: 'all',
     category: 'all',
     keyword: '',
+    includeDeleted: false,
   });
   const [assignModalVisible, setAssignModalVisible] = useState(false);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
@@ -65,30 +66,95 @@ const RepairOrderList = ({ onRefresh }) => {
   const searchRepairOrders = async (searchFilters = {}) => {
     setLoading(true);
     try {
-      const result = await repairService.searchRepairOrders({
-        ...filters,
-        ...searchFilters,
-      });
-      setRepairOrders(result.data);
+      // 将 categoryKey 转换为 categoryName（如果存在）
+      const processedFilters = { ...filters, ...searchFilters };
+      if (processedFilters.category && processedFilters.category !== 'all' && categoryKeyToNameMap[processedFilters.category]) {
+        processedFilters.category = categoryKeyToNameMap[processedFilters.category];
+        console.log('搜索前分类Key转换:', searchFilters.category, '->', processedFilters.category);
+      }
+      
+      const result = await repairService.searchRepairOrders(processedFilters);
+      console.log('搜索工单结果:', result);
+      console.log('工单数据（原始）:', result.data);
+      
+      // 如果数据还没有映射（检查是否有 categoryName 但没有 category），则手动映射
+      let mappedData = result.data || [];
+      if (mappedData.length > 0 && mappedData[0].categoryName && !mappedData[0].category) {
+        console.log('⚠️ 检测到数据未映射，执行手动映射...');
+        mappedData = mappedData.map(order => ({
+          ...order,
+          id: order.ticketId || order.id,
+          ticketId: order.ticketId || order.id,
+          category: order.categoryName || order.category || '',
+          location: order.locationText || order.location || '',
+          description: order.description || '',
+          priority: order.priority || 'low',
+          status: order.status === 'WAITING_ACCEPT' ? 'pending' : 
+                  order.status === 'IN_PROGRESS' ? 'processing' :
+                  order.status === 'RESOLVED' ? 'completed' :
+                  order.status === 'WAITING_FEEDBACK' ? 'to_be_evaluated' :
+                  order.status === 'FEEDBACKED' || order.status === 'CLOSED' ? 'closed' :
+                  order.status === 'REJECTED' ? 'rejected' : order.status,
+          studentID: order.studentId || order.studentID || '',
+          repairmanId: order.staffId || order.repairmanId || null,
+          created_at: order.createdAt || order.created_at || '',
+          deleted: order.deleted || false,
+          deletedAt: order.deletedAt || null,
+        }));
+        console.log('✅ 手动映射完成:', mappedData);
+      }
+      
+      console.log('工单数量:', mappedData?.length || 0);
+      setRepairOrders(mappedData);
     } catch (error) {
       console.error('搜索工单失败:', error);
       message.error('搜索工单失败');
+      setRepairOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // 切换显示已删除工单
+  const handleIncludeDeletedChange = (checked) => {
+    const newFilters = { ...filters, includeDeleted: checked };
+    setFilters(newFilters);
+    searchRepairOrders(newFilters);
+  };
+
+  // 分类Key到分类名称的映射
+  const categoryKeyToNameMap = {
+    'waterAndElectricity': '水电维修',
+    'networkIssues': '网络故障',
+    'furnitureRepair': '家具维修',
+    'applianceIssues': '电器故障',
+    'publicFacilities': '公共设施',
+  };
+
   // 处理筛选条件变化
   const handleFilterChange = (key, value) => {
-    const newFilters = { ...filters, [key]: value };
-    setFilters(newFilters);
+    // 保留现有的所有筛选条件（包括 keyword），只更新指定的筛选条件
+    let filterValue = value;
+    
+    // 如果是分类筛选，将 categoryKey 转换为 categoryName
+    if (key === 'category' && value !== 'all' && categoryKeyToNameMap[value]) {
+      filterValue = categoryKeyToNameMap[value];
+      console.log('分类Key转换:', value, '->', filterValue);
+    }
+    
+    const newFilters = { ...filters, [key]: filterValue };
+    setFilters({ ...filters, [key]: value }); // UI状态保持使用categoryKey
+    console.log('筛选条件变化:', key, '=', value, '->', filterValue, '完整筛选条件:', newFilters);
     searchRepairOrders(newFilters);
   };
 
   // 处理关键词搜索
   const handleSearch = (value) => {
-    const newFilters = { ...filters, keyword: value };
+    const keyword = value ? value.trim() : '';
+    // 保留现有的所有筛选条件（包括 status、category 等），只更新 keyword
+    const newFilters = { ...filters, keyword };
     setFilters(newFilters);
+    console.log('搜索工单，关键词:', keyword, '完整筛选条件:', newFilters);
     searchRepairOrders(newFilters);
   };
 
@@ -162,7 +228,10 @@ const RepairOrderList = ({ onRefresh }) => {
       dataIndex: 'id',
       key: 'id',
       width: 80,
-      render: (id, record) => id || record.ticketId || '未知',
+      render: (id, record) => {
+        const ticketId = id || record.ticketId || record.id;
+        return ticketId ? String(ticketId) : '未知';
+      },
     },
     {
       title: '报修分类',
@@ -239,6 +308,7 @@ const RepairOrderList = ({ onRefresh }) => {
             <Space direction="vertical" size="small">
               <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
               {!record.repairmanId && <Tag color="default">未分配</Tag>}
+              {record.deleted && <Tag color="red">已删除</Tag>}
             </Space>
           );
         } catch (error) {
@@ -273,13 +343,44 @@ const RepairOrderList = ({ onRefresh }) => {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 150,
-      render: (time) => {
-        if (!time) return '未知';
-        // 如果是字符串，直接显示；如果是日期对象，格式化
-        if (typeof time === 'string') {
-          return time;
+      render: (time, record) => {
+        // 尝试多个可能的字段名
+        const createdAt = time || record.createdAt || record.created_at || '';
+        if (!createdAt) return '未知';
+        // 如果是字符串，尝试解析；如果是日期对象，格式化
+        if (typeof createdAt === 'string') {
+          // 如果是 ISO 8601 格式的字符串，解析并格式化
+          if (createdAt.includes('T') || createdAt.includes('-')) {
+            try {
+              const date = new Date(createdAt);
+              if (!isNaN(date.getTime())) {
+                return date.toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+              }
+            } catch (e) {
+              console.error('日期解析失败:', e);
+            }
+          }
+          return createdAt;
         }
-        return new Date(time).toLocaleString('zh-CN');
+        // 如果是日期对象
+        try {
+          return new Date(createdAt).toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        } catch (e) {
+          console.error('日期格式化失败:', e);
+          return '未知';
+        }
       },
     },
     {
@@ -362,16 +463,34 @@ const RepairOrderList = ({ onRefresh }) => {
           <Col span={12}>
             <div style={{ marginBottom: 8 }}>关键词搜索</div>
             <Search
-              placeholder="搜索位置或问题描述..."
+              placeholder="搜索工单ID、描述、位置、学生ID、维修工ID、分类..."
               allowClear
+              value={filters.keyword || ''}
               enterButton={<SearchOutlined />}
               onSearch={handleSearch}
               onChange={(e) => {
-                if (!e.target.value) {
+                const value = e.target.value || '';
+                // 实时更新关键词，但不立即搜索（等待用户按回车或点击搜索按钮）
+                setFilters({ ...filters, keyword: value });
+                // 如果清空了搜索框，立即搜索
+                if (!value) {
                   handleSearch('');
                 }
               }}
             />
+          </Col>
+        </Row>
+        <Row gutter={16} style={{ marginTop: 16 }}>
+          <Col span={24}>
+            <Space>
+              <span>显示已删除工单：</span>
+              <Switch
+                checked={filters.includeDeleted}
+                onChange={handleIncludeDeletedChange}
+                checkedChildren="是"
+                unCheckedChildren="否"
+              />
+            </Space>
           </Col>
         </Row>
       </Card>

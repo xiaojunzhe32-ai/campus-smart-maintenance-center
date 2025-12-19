@@ -109,12 +109,24 @@ const toQueryString = (params) => {
   if (!params) return "";
   const searchParams = new URLSearchParams();
   Object.keys(params).forEach((key) => {
-    if (
-      params[key] !== undefined &&
-      params[key] !== null &&
-      params[key] !== ""
-    ) {
-      searchParams.append(key, params[key]);
+    const value = params[key];
+    // 跳过 undefined 和 null，但允许空字符串和0等falsy值
+    if (value !== undefined && value !== null) {
+      // 布尔值转换为字符串
+      if (typeof value === 'boolean') {
+        searchParams.append(key, value.toString());
+      } else {
+        // 对于字符串，如果为空字符串则跳过（清空搜索时不传递参数）
+        // 对于其他类型（数字等），正常传递
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (trimmed !== '') {
+            searchParams.append(key, trimmed);
+          }
+        } else {
+          searchParams.append(key, String(value));
+        }
+      }
     }
   });
   const str = searchParams.toString();

@@ -125,6 +125,13 @@ export const repairService = {
             (order.description.length > 20 ? order.description.substring(0, 20) + '...' : order.description) : 
             (order.locationText ? `报修-${order.locationText}` : '报修单'));
           
+          // 映射状态，添加调试日志
+          const backendStatus = order.status;
+          const frontendStatus = mapStatusToFrontend(backendStatus);
+          if (backendStatus && backendStatus !== frontendStatus) {
+            console.log(`状态映射: ${backendStatus} -> ${frontendStatus} (订单ID: ${order.ticketId || order.id})`);
+          }
+          
           return {
             ...order,
             id: order.ticketId || order.id,
@@ -135,7 +142,7 @@ export const repairService = {
             completed_at: order.completedAt || order.completed_at,
             repairmanId: order.staffId || order.repairmanId || null,
             repairmanName: order.staffName || null, // 添加维修人员名称
-            status: mapStatusToFrontend(order.status), // 映射状态
+            status: frontendStatus, // 映射状态
             title: title, // 确保标题正确生成
           };
         }) : [];

@@ -16,11 +16,9 @@ const DataAnalysis = () => {
     userSatisfaction: '0%'
   });
   const [loading, setLoading] = useState(true);
-  const [usingMockData, setUsingMockData] = useState(false);
 
   const loadStatistics = async () => {
     setLoading(true);
-    setUsingMockData(false);
     
     try {
       // 新增：获取月度统计数据
@@ -45,19 +43,8 @@ const DataAnalysis = () => {
       setStatusData(statusStats);
       setMonthlyData(monthlyStats); // 设置月度统计数据
       setOverallStats(overallStatsData);
-      
-      // 检查是否使用了模拟数据
-      const isUsingMockData = 
-        JSON.stringify(categoryStats) === JSON.stringify(statisticsService.mockCategoryData) ||
-        JSON.stringify(locationStats) === JSON.stringify(statisticsService.mockLocationData) ||
-        JSON.stringify(ratingStats) === JSON.stringify(statisticsService.mockRatingData) ||
-        JSON.stringify(statusStats) === JSON.stringify(statisticsService.mockStatusData) ||
-        JSON.stringify(monthlyStats) === JSON.stringify(statisticsService.mockMonthlyData); // 新增：检查月度数据
-      
-      setUsingMockData(isUsingMockData);
     } catch (error) {
       console.error('加载统计数据失败:', error);
-      setUsingMockData(true);
     } finally {
       setLoading(false);
     }
@@ -79,16 +66,6 @@ const DataAnalysis = () => {
   return (
     <div style={{ padding: '16px' }}>
       <h2>数据统计与分析</h2>
-      
-      {usingMockData && (
-        <Alert
-          message="提示"
-          description="当前显示的是模拟数据，实际数据将在后端 API 就绪后自动加载。"
-          type="info"
-          showIcon
-          style={{ marginBottom: '16px' }}
-        />
-      )}
       
       {/* 统计摘要 */}
       <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
@@ -228,8 +205,16 @@ const RepairCategoryPieChart = ({ data }) => {
     },
     tooltip: {
       formatter: (datum) => {
-        const percent = ((datum.value / data.reduce((sum, item) => sum + item.value, 0)) * 100).toFixed(1);
-        return { name: datum.type, value: `${datum.value} (${percent}%)` };
+        const total = data.reduce((sum, item) => sum + item.value, 0);
+        const percent = total > 0 ? ((datum.value / total) * 100).toFixed(1) : '0.0';
+        let extra = '';
+        if (typeof datum.avgRating === 'number') {
+          extra += `，平均评分：${datum.avgRating.toFixed(1)} 分`;
+        }
+        if (typeof datum.completedTickets === 'number') {
+          extra += `，已完成：${datum.completedTickets} 单`;
+        }
+        return { name: datum.type, value: `${datum.value} (${percent}%)${extra}` };
       },
     },
     interactions: [{ type: 'element-active' }],
