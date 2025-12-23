@@ -98,18 +98,20 @@ const MyRepairs = ({ onRefresh }) => {
       console.log('获取到的订单数据:', result);
       // 映射后端字段名到前端字段名：ticketId -> id, categoryName -> category, locationText -> location
       const mappedData = (result.data || []).map(order => {
-        // 生成标题：如果没有title，使用description的前20个字符作为title
-        // 注意：现在TicketSummaryDto包含description字段
+        // 确保title和description正确区分
         const description = order.description || '';
-        const title = order.title || (description ? 
-          (description.length > 20 ? description.substring(0, 20) + '...' : description) : 
-          (order.locationText ? `报修-${order.locationText}` : '报修单'));
+        // 如果后端返回的title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+        const rawTitle = order.title || '';
+        const title = (rawTitle && rawTitle !== description) 
+          ? rawTitle 
+          : (order.locationText ? `报修-${order.locationText}` : '报修单');
         
         console.log('处理订单标题:', {
           orderId: order.ticketId || order.id,
-          title: order.title,
+          rawTitle: order.title,
           description: description,
           locationText: order.locationText,
+          titleEqualsDescription: rawTitle === description,
           generatedTitle: title
         });
         
@@ -118,14 +120,14 @@ const MyRepairs = ({ onRefresh }) => {
           id: order.ticketId || order.id, // 兼容两种字段名
           category: order.categoryName || order.category,
           location: order.locationText || order.location,
-          description: description, // 确保description字段存在
+          description: description, // 确保description字段存在且完整
           created_at: order.createdAt || order.created_at,
           assigned_at: order.assignedAt || order.assigned_at,
           completed_at: order.completedAt || order.completed_at,
           repairmanId: order.staffId || order.repairmanId || null,
           repairmanName: order.staffName || null, // 添加维修人员名称
           status: mapStatusToFrontend(order.status), // 映射状态
-          title: title, // 确保标题正确生成
+          title: title, // 确保标题正确生成，与description区分
         };
       });
       
@@ -254,27 +256,39 @@ const MyRepairs = ({ onRefresh }) => {
         repairmanId: orderDetail.staffId || orderDetail.repairmanId || null,
         repairmanName: orderDetail.staffName || orderDetail.repairmanName || null, // 确保维修人员名称正确映射
         status: mapStatusToFrontend(orderDetail.status), // 映射状态
-        // 如果没有title，使用description的前20个字符作为title
-        title: orderDetail.title || (orderDetail.description ? 
-          (orderDetail.description.length > 20 ? orderDetail.description.substring(0, 20) + '...' : orderDetail.description) : 
-          (orderDetail.locationText ? `报修-${orderDetail.locationText}` : '报修单')),
+        // 如果后端返回的title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+        title: (orderDetail.title && orderDetail.title !== orderDetail.description) 
+          ? orderDetail.title 
+          : (orderDetail.locationText ? `报修-${orderDetail.locationText}` : '报修单'),
         // 添加评价相关字段
         rating: orderDetail.rating?.score || orderDetail.rating || null,
         feedback: orderDetail.rating?.comment || orderDetail.feedback || null,
         // 处理图片：如果是对象数组，提取 imageUrl；如果是字符串数组，直接使用
-        images: (orderDetail.images || []).map(img => {
-          if (typeof img === 'string') {
-            // 如果是字符串，检查是否是完整URL，如果不是，添加base URL
-            return img.startsWith('http') ? img : `http://localhost:8080${img.startsWith('/') ? '' : '/'}${img}`;
-          }
-          // 如果是对象，提取 imageUrl
-          const imageUrl = img.imageUrl || img.url || img;
-          // 确保URL完整
-          if (!imageUrl) return null;
-          const fullUrl = typeof imageUrl === 'string' && imageUrl.startsWith('http') ? imageUrl : `http://localhost:8080${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
-          console.log('处理图片URL:', imageUrl, '->', fullUrl);
-          return fullUrl;
-        }).filter(Boolean), // 过滤掉null值
+        images: (() => {
+          console.log('原始图片数据:', orderDetail.images);
+          const processedImages = (orderDetail.images || []).map((img, idx) => {
+            console.log(`处理第 ${idx} 张图片:`, img, '类型:', typeof img);
+            if (typeof img === 'string') {
+              // 如果是字符串，检查是否是完整URL，如果不是，添加base URL
+              const fullUrl = img.startsWith('http') ? img : `http://localhost:8080${img.startsWith('/') ? '' : '/'}${img}`;
+              console.log(`图片 ${idx} (字符串):`, img, '->', fullUrl);
+              return fullUrl;
+            }
+            // 如果是对象，提取 imageUrl
+            const imageUrl = img.imageUrl || img.url || (typeof img === 'object' ? JSON.stringify(img) : img);
+            console.log(`图片 ${idx} (对象):`, img, '提取的URL:', imageUrl);
+            // 确保URL完整
+            if (!imageUrl) {
+              console.warn(`图片 ${idx} 没有有效的URL`);
+              return null;
+            }
+            const fullUrl = typeof imageUrl === 'string' && imageUrl.startsWith('http') ? imageUrl : `http://localhost:8080${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+            console.log(`图片 ${idx} 最终URL:`, imageUrl, '->', fullUrl);
+            return fullUrl;
+          }).filter(Boolean); // 过滤掉null值
+          console.log('处理后的图片数组:', processedImages);
+          return processedImages;
+        })(),
       };
       
       console.log('处理后的订单详情:', orderWithImages);
@@ -740,7 +754,7 @@ const MyRepairs = ({ onRefresh }) => {
                 {selectedOrder.id}
               </Descriptions.Item>
               <Descriptions.Item label="报修标题" span={1}>
-                {selectedOrder.title || (selectedOrder.description ? (selectedOrder.description.length > 20 ? selectedOrder.description.substring(0, 20) + '...' : selectedOrder.description) : '无标题')}
+                {selectedOrder.title || (selectedOrder.locationText ? `报修-${selectedOrder.locationText}` : '报修单')}
               </Descriptions.Item>
               <Descriptions.Item label="报修分类" span={1}>
                 {repairUtils.getCategoryInfo(selectedOrder.category)?.label ||

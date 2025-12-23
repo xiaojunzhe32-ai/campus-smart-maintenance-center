@@ -67,6 +67,7 @@ export const repairService = {
   // 获取所有工单（管理员端使用）
   getRepairOrders: async (params = {}) => {
     try {
+      console.log('获取工单，请求参数:', params);
       const response = await api.admin.getAllOrders(params);
       console.log('获取工单响应:', response);
       
@@ -75,19 +76,48 @@ export const repairService = {
         console.log('原始工单数据:', rawData);
         
         // 映射后端字段到前端字段
-        const mappedData = Array.isArray(rawData) ? rawData.map(order => ({
-          ...order,
-          id: order.ticketId || order.id,
-          ticketId: order.ticketId || order.id,
-          category: order.categoryName || order.category || '',
-          location: order.locationText || order.location || '',
-          description: order.description || '',
-          priority: order.priority || 'low',
-          status: mapStatusToFrontend(order.status), // 映射状态
-          studentID: order.studentId || order.studentID || '',
-          repairmanId: order.staffId || order.repairmanId || null,
-          created_at: order.createdAt || order.created_at || '',
-        })) : [];
+        // 注意：后端 TicketSummaryDto 使用 record，JSON 字段名与 record 字段名一致（驼峰命名）
+        // 字段名：ticketId, categoryName, locationText, studentId, staffId, createdAt, deleted, deletedAt
+        const mappedData = Array.isArray(rawData) ? rawData.map(order => {
+          console.log('原始订单数据:', order);
+          // 确保title和description正确区分
+          const description = order.description || '';
+          // 如果后端返回的title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+          const rawTitle = order.title || '';
+          const title = (rawTitle && rawTitle !== description) 
+            ? rawTitle 
+            : (order.locationText ? `报修-${order.locationText}` : '报修单');
+          
+          const mapped = {
+            ...order,
+            // 工单ID：后端字段是 ticketId
+            id: order.ticketId || order.id,
+            ticketId: order.ticketId || order.id,
+            // 分类：后端字段是 categoryName
+            category: order.categoryName || order.category || '',
+            // 位置：后端字段是 locationText
+            location: order.locationText || order.location || '',
+            // 标题：确保title字段存在且与description区分
+            title: title,
+            // 描述：后端字段是 description，确保与title不同
+            description: description,
+            // 优先级：后端字段是 priority
+            priority: order.priority || 'low',
+            // 状态：后端字段是 status，需要映射
+            status: mapStatusToFrontend(order.status),
+            // 学生ID：后端字段是 studentId
+            studentID: order.studentId || order.studentID || '',
+            // 维修工ID：后端字段是 staffId
+            repairmanId: order.staffId || order.repairmanId || null,
+            // 创建时间：后端字段是 createdAt（LocalDateTime）
+            created_at: order.createdAt || order.created_at || '',
+            // 删除标记：后端字段是 deleted
+            deleted: order.deleted || false,
+            deletedAt: order.deletedAt || null,
+          };
+          console.log('映射后的订单数据:', mapped);
+          return mapped;
+        }) : [];
         
         console.log('映射后的工单数据:', mappedData);
         
@@ -119,11 +149,13 @@ export const repairService = {
         
         // 映射后端字段到前端字段
         const mappedData = Array.isArray(rawData) ? rawData.map(order => {
-          // 生成标题：如果没有title，使用description的前20个字符作为title
-          // 注意：TicketSummaryDto可能没有description字段，需要从详情获取
-          const title = order.title || (order.description ? 
-            (order.description.length > 20 ? order.description.substring(0, 20) + '...' : order.description) : 
-            (order.locationText ? `报修-${order.locationText}` : '报修单'));
+          // 确保title和description正确区分
+          const description = order.description || '';
+          // 如果后端返回的title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+          const rawTitle = order.title || '';
+          const title = (rawTitle && rawTitle !== description) 
+            ? rawTitle 
+            : (order.locationText ? `报修-${order.locationText}` : '报修单');
           
           // 映射状态，添加调试日志
           const backendStatus = order.status;
@@ -137,13 +169,14 @@ export const repairService = {
             id: order.ticketId || order.id,
             category: order.categoryName || order.category,
             location: order.locationText || order.location,
+            description: description, // 确保description字段存在且完整
             created_at: order.createdAt || order.created_at,
             assigned_at: order.assignedAt || order.assigned_at,
             completed_at: order.completedAt || order.completed_at,
             repairmanId: order.staffId || order.repairmanId || null,
             repairmanName: order.staffName || null, // 添加维修人员名称
             status: frontendStatus, // 映射状态
-            title: title, // 确保标题正确生成
+            title: title, // 确保标题正确生成，与description区分
           };
         }) : [];
         
@@ -322,21 +355,83 @@ export const repairService = {
   // 搜索工单
   searchRepairOrders: async (filters = {}) => {
     try {
-      // 使用getRepairOrders API进行搜索
+      console.log('🔍 [searchRepairOrders] 搜索工单，请求参数:', filters);
       const response = await api.admin.getAllOrders(filters);
+      console.log('🔍 [searchRepairOrders] 搜索工单响应:', response);
       
       if (response.code === 200) {
+        const rawData = response.data.list || response.data || [];
+        console.log('🔍 [searchRepairOrders] 搜索原始工单数据:', rawData);
+        console.log('🔍 [searchRepairOrders] 原始数据类型:', Array.isArray(rawData) ? '数组' : typeof rawData);
+        console.log('🔍 [searchRepairOrders] 原始数据长度:', Array.isArray(rawData) ? rawData.length : 0);
+        
+        if (Array.isArray(rawData) && rawData.length > 0) {
+          console.log('🔍 [searchRepairOrders] 第一个原始订单:', rawData[0]);
+          console.log('🔍 [searchRepairOrders] 第一个订单的字段:', Object.keys(rawData[0]));
+        }
+        
+        // 映射后端字段到前端字段（与 getRepairOrders 保持一致）
+        const mappedData = Array.isArray(rawData) ? rawData.map((order, index) => {
+          console.log(`🔍 [searchRepairOrders] 映射订单 ${index}:`, order);
+          // 确保title和description正确区分
+          const description = order.description || '';
+          // 如果后端返回的title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+          const rawTitle = order.title || '';
+          const title = (rawTitle && rawTitle !== description) 
+            ? rawTitle 
+            : (order.locationText ? `报修-${order.locationText}` : '报修单');
+          
+          const mapped = {
+            ...order,
+            // 工单ID：后端字段是 ticketId
+            id: order.ticketId || order.id,
+            ticketId: order.ticketId || order.id,
+            // 分类：后端字段是 categoryName
+            category: order.categoryName || order.category || '',
+            // 位置：后端字段是 locationText
+            location: order.locationText || order.location || '',
+            // 标题：确保title字段存在且与description区分
+            title: title,
+            // 描述：后端字段是 description，确保与title不同
+            description: description,
+            // 优先级：后端字段是 priority
+            priority: order.priority || 'low',
+            // 状态：后端字段是 status，需要映射
+            status: mapStatusToFrontend(order.status),
+            // 学生ID：后端字段是 studentId
+            studentID: order.studentId || order.studentID || '',
+            // 维修工ID：后端字段是 staffId
+            repairmanId: order.staffId || order.repairmanId || null,
+            // 创建时间：后端字段是 createdAt（LocalDateTime）
+            created_at: order.createdAt || order.createdAt || order.created_at || '',
+            // 删除标记：后端字段是 deleted
+            deleted: order.deleted || false,
+            deletedAt: order.deletedAt || null,
+          };
+          console.log(`🔍 [searchRepairOrders] 映射后的订单 ${index}:`, mapped);
+          console.log(`🔍 [searchRepairOrders] 映射后的订单 ${index} 字段:`, Object.keys(mapped));
+          return mapped;
+        }) : [];
+        
+        console.log('🔍 [searchRepairOrders] 搜索映射后的工单数据:', mappedData);
+        console.log('🔍 [searchRepairOrders] 映射后的数据长度:', mappedData.length);
+        
+        if (mappedData.length > 0) {
+          console.log('🔍 [searchRepairOrders] 第一个映射后的订单:', mappedData[0]);
+          console.log('🔍 [searchRepairOrders] 第一个映射后的订单字段:', Object.keys(mappedData[0]));
+        }
+        
         return {
-          data: response.data.list || response.data,
-          total: response.data.total || (response.data.list ? response.data.list.length : 0),
-          page: response.data.page || 1,
+          data: mappedData,
+          total: response.data.total || mappedData.length,
+          page: response.data.page || 0,
           pageSize: response.data.pageSize || 10,
         };
       } else {
         throw new Error(response.message || '搜索工单失败');
       }
     } catch (error) {
-      console.error('搜索工单失败:', error);
+      console.error('🔍 [searchRepairOrders] 搜索工单失败:', error);
       message.error('搜索工单失败: ' + error.message);
       throw error;
     }

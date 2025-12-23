@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Tag, Button, Space, Select, Input, 
-  Modal, Form, message, Card, Row, Col, Switch 
+  Modal, Form, message, Card, Row, Col, Switch, Descriptions, Image, Spin
 } from 'antd';
 import { 
   SearchOutlined, UserOutlined, CloseOutlined, CheckOutlined 
@@ -24,9 +24,54 @@ const RepairOrderList = ({ onRefresh }) => {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [repairmen, setRepairmen] = useState([]);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailData, setDetailData] = useState(null);
   const [assignForm] = Form.useForm();
   const [rejectForm] = Form.useForm();
 
+  const mapStatusToFrontend = (status) => {
+    if (!status) return 'pending';
+    const map = {
+      WAITING_ACCEPT: 'pending',
+      IN_PROGRESS: 'processing',
+      RESOLVED: 'completed',
+      WAITING_FEEDBACK: 'to_be_evaluated',
+      FEEDBACKED: 'closed',
+      CLOSED: 'closed',
+      REJECTED: 'rejected',
+    };
+    return map[status] || status;
+  };
+
+  const mapPriorityToFrontend = (priority) => {
+    if (!priority) return 'low';
+    const map = {
+      LOW: 'low',
+      MEDIUM: 'medium',
+      HIGH: 'high',
+    };
+    return map[priority] || priority.toLowerCase?.() || priority;
+  };
+
+  const formatTime = (val) => {
+    if (!val) return '';
+    try {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+    } catch (e) {
+      console.error('时间格式化失败:', val, e);
+    }
+    return val;
+  };
   // 加载工单数据
   const loadRepairOrders = async (searchFilters = {}) => {
     setLoading(true);
@@ -174,6 +219,46 @@ const RepairOrderList = ({ onRefresh }) => {
     rejectForm.resetFields();
   };
 
+  // 查看工单详情
+  const handleViewDetail = async (order) => {
+    try {
+      setDetailLoading(true);
+      setDetailVisible(true);
+      const id = order.ticketId || order.id;
+      if (!id) {
+        message.error('工单ID不存在');
+        return;
+      }
+      const detail = await repairService.getRepairOrderById(id);
+      setDetailData({
+        ...detail,
+        id: detail.ticketId || detail.id,
+        title: detail.title || (detail.locationText ? `报修-${detail.locationText}` : '报修单'),
+        description: detail.description || '',
+        location: detail.locationText || detail.location || '',
+        status: mapStatusToFrontend(detail.status),
+        images: detail.images || detail.imageList || [],
+        studentId: detail.studentId || detail.studentNumber,
+        repairmanId: detail.staffId || detail.repairmanId,
+        category: detail.categoryName || detail.category,
+        priority: mapPriorityToFrontend(detail.priority || 'low'),
+        createdAt: detail.createdAt || detail.created_at,
+        assignedAt: detail.assignedAt || detail.assigned_at,
+        completedAt: detail.completedAt || detail.completed_at,
+        rejectionReason: detail.rejectionReason || detail.rejection_reason,
+        repairNotes: detail.repairNotes || detail.repair_notes,
+        studentName: detail.studentName || detail.student_name || '',
+        repairmanName: detail.repairmanName || detail.staffName || detail.repairman_name || '',
+      });
+    } catch (err) {
+      console.error('获取工单详情失败:', err);
+      message.error('获取工单详情失败');
+      setDetailVisible(false);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   // 处理分配维修人员
   const handleAssignSubmit = async (values) => {
     try {
@@ -231,6 +316,21 @@ const RepairOrderList = ({ onRefresh }) => {
       render: (id, record) => {
         const ticketId = id || record.ticketId || record.id;
         return ticketId ? String(ticketId) : '未知';
+      },
+    },
+    {
+      title: '报修标题',
+      dataIndex: 'title',
+      key: 'title',
+      width: 150,
+      ellipsis: true,
+      render: (title, record) => {
+        // 如果title和description相同，说明后端没有正确存储title，使用位置信息生成标题
+        const description = record.description || '';
+        if (title && title !== description) {
+          return title;
+        }
+        return record.locationText ? `报修-${record.locationText}` : '报修单';
       },
     },
     {
@@ -393,6 +493,12 @@ const RepairOrderList = ({ onRefresh }) => {
         
         return (
           <Space size="small">
+            <Button
+              size="small"
+              onClick={() => handleViewDetail(record)}
+            >
+              查看详情
+            </Button>
             {isPending && (
               <>
                 <Button 
@@ -496,11 +602,11 @@ const RepairOrderList = ({ onRefresh }) => {
       </Card>
 
       {/* 工单表格 */}
-        <Table
-          columns={columns}
-          dataSource={repairOrders}
-          rowKey={(record) => record.ticketId || record.id || Math.random()}
-          loading={loading}
+      <Table
+        columns={columns}
+        dataSource={repairOrders}
+        rowKey={(record) => record.ticketId || record.id || Math.random()}
+        loading={loading}
         pagination={{
           pageSize: 10,
           showSizeChanger: true,
@@ -585,6 +691,143 @@ const RepairOrderList = ({ onRefresh }) => {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 工单详情模态框 */}
+      <Modal
+        title="工单详情"
+        open={detailVisible}
+        onCancel={() => setDetailVisible(false)}
+        footer={null}
+        width={720}
+        destroyOnClose
+      >
+        {detailLoading ? (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <Spin />
+          <div style={{ marginTop: 12 }}>正在加载...</div>
+        </div>
+      ) : detailData ? (
+        <div>
+          <Descriptions
+            title="基本信息"
+            bordered
+            size="small"
+            column={2}
+            style={{ marginBottom: 16 }}
+          >
+            <Descriptions.Item label="工单ID">{detailData.id}</Descriptions.Item>
+            <Descriptions.Item label="报修标题">
+              {detailData.title || (detailData.location ? `报修-${detailData.location}` : '报修单')}
+            </Descriptions.Item>
+            <Descriptions.Item label="报修分类">
+              {detailData.categoryName || detailData.category || '未分类'}
+            </Descriptions.Item>
+            <Descriptions.Item label="紧急程度">
+              <Tag color={detailData.priority || 'default'}>
+                {repairUtils.getPriorityInfo
+                  ? repairUtils.getPriorityInfo(detailData.priority)?.label || detailData.priority || '未知'
+                  : detailData.priority || '未知'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="具体位置" span={2}>
+              {detailData.location || '未填写'}
+            </Descriptions.Item>
+            <Descriptions.Item label="问题描述" span={2}>
+              {detailData.description || '无'}
+            </Descriptions.Item>
+            <Descriptions.Item label="当前状态">
+              {(() => {
+                const statusInfo = repairUtils.getStatusInfo
+                  ? repairUtils.getStatusInfo(detailData.status)
+                  : { label: detailData.status || '未知', color: 'default' };
+                return (
+                  <Tag color={statusInfo?.color || 'default'}>
+                    {statusInfo?.label || detailData.status}
+                  </Tag>
+                );
+              })()}
+            </Descriptions.Item>
+            <Descriptions.Item label="提交时间">
+              {formatTime(detailData.createdAt || detailData.created_at)}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Descriptions
+            title="人员信息"
+            bordered
+            size="small"
+            column={2}
+            style={{ marginBottom: 16 }}
+          >
+            <Descriptions.Item label="报修学生">
+              {detailData.studentName || detailData.studentId || '未知'}
+            </Descriptions.Item>
+            <Descriptions.Item label="维修人员">
+              {detailData.repairmanName || detailData.repairmanId || detailData.staffId || '未分配'}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Descriptions
+            title="进度时间"
+            bordered
+            size="small"
+            column={1}
+            style={{ marginBottom: 16 }}
+          >
+            <Descriptions.Item label="提交时间">
+              {formatTime(detailData.createdAt || detailData.created_at)}
+            </Descriptions.Item>
+            <Descriptions.Item label="分配时间">
+              {formatTime(detailData.assignedAt || detailData.assigned_at) || '未分配'}
+            </Descriptions.Item>
+            <Descriptions.Item label="完成时间">
+              {formatTime(detailData.completedAt || detailData.completed_at) || '未完成'}
+            </Descriptions.Item>
+            {detailData.rejectionReason && (
+              <Descriptions.Item label="驳回原因">
+                {detailData.rejectionReason}
+              </Descriptions.Item>
+            )}
+            {detailData.repairNotes && (
+              <Descriptions.Item label="维修备注">
+                {detailData.repairNotes}
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+
+          <div style={{ marginBottom: 16 }}>
+            <h4 style={{ marginBottom: 12 }}>现场照片</h4>
+            {detailData.images && detailData.images.length > 0 ? (
+              <Image.PreviewGroup>
+                <Space wrap>
+                  {detailData.images.map((img, idx) => {
+                    let url = typeof img === 'string' ? img : (img.imageUrl || img.url || img.image_url || img);
+                    if (url && !url.startsWith('http')) {
+                      url = `http://localhost:8080${url.startsWith('/') ? '' : '/'}${url}`;
+                    }
+                    return (
+                      <Image
+                        key={idx}
+                        width={120}
+                        height={90}
+                        src={url}
+                        style={{ objectFit: 'cover', borderRadius: 6 }}
+                        fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBS1pFSFpSg0k3RtVkww1JXSnlRYgqpJQZJFdQqg9LcjQ0PSMZxYaCAhjrH4GBs5F2QW6QAlGx6wMDMwT6ZgUJ5AcFnQcC9nUgUjGwjCx3CgPDBQcB9kShuGkYGyI1yspDg8T8jUFJgYJTA0MDAvYkDEuSykAjrvgODBbsCxKJEuAMYv7EUpxkbQBx8gfB4WbE0C4gdQyGHQf0"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    );
+                  })}
+                </Space>
+              </Image.PreviewGroup>
+            ) : (
+              <div style={{ color: '#999', textAlign: 'center', padding: 12 }}>暂无照片</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: 20 }}>暂无数据</div>
+      )}
       </Modal>
     </div>
   );

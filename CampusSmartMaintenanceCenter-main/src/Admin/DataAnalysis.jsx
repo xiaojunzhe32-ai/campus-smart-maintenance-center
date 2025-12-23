@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Tag, Spin, Statistic, Alert } from 'antd';
+import { Row, Col, Card, Table, Tag, Spin, Statistic, Alert, Button, Space, Popconfirm, message } from 'antd';
 import { Pie, Column, Line } from '@ant-design/charts';
 import { statisticsService } from './statisticsService';
 import { TASK_STATUS } from '../Worker/mytaskService';
+import { backupService } from './backupService';
 
 const DataAnalysis = () => {
   const [categoryData, setCategoryData] = useState([]);
@@ -16,6 +17,8 @@ const DataAnalysis = () => {
     userSatisfaction: '0%'
   });
   const [loading, setLoading] = useState(true);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupList, setBackupList] = useState([]);
 
   const loadStatistics = async () => {
     setLoading(true);
@@ -50,8 +53,59 @@ const DataAnalysis = () => {
     }
   };
 
+  const loadBackups = async () => {
+    setBackupLoading(true);
+    try {
+      const list = await backupService.list();
+      setBackupList(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('加载备份列表失败:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setBackupLoading(true);
+    try {
+      await backupService.create();
+      await loadBackups();
+    } catch (error) {
+      console.error('手动备份失败:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestore = async (fileName) => {
+    if (!fileName) return;
+    setBackupLoading(true);
+    try {
+      await backupService.restore(fileName);
+      message.success('恢复完成，建议刷新页面并核对数据');
+    } catch (error) {
+      console.error('恢复失败:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleDelete = async (fileName) => {
+    if (!fileName) return;
+    setBackupLoading(true);
+    try {
+      await backupService.remove(fileName);
+      await loadBackups();
+    } catch (error) {
+      console.error('删除备份失败:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadStatistics();
+    loadBackups();
   }, []);
 
   if (loading) {
@@ -66,6 +120,69 @@ const DataAnalysis = () => {
   return (
     <div style={{ padding: '16px' }}>
       <h2>数据统计与分析</h2>
+
+      {/* 备份与恢复 */}
+      <Card
+        size="small"
+        title="数据备份与恢复"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Space>
+            <Button type="primary" onClick={handleCreateBackup} loading={backupLoading}>
+              立即备份
+            </Button>
+            <Button onClick={loadBackups} loading={backupLoading}>
+              刷新列表
+            </Button>
+          </Space>
+        }
+      >
+        <Table
+          size="small"
+          loading={backupLoading}
+          dataSource={backupList}
+          rowKey={(item) => item.fileName || item.file_path || item.file_name}
+          pagination={{ pageSize: 5 }}
+          columns={[
+            { title: '文件名', dataIndex: 'fileName', key: 'fileName', ellipsis: true },
+            { title: '备份时间', dataIndex: 'backupTime', key: 'backupTime', render: (t) => t || '-' },
+            { title: '大小', dataIndex: 'fileSize', key: 'fileSize', render: (s) => formatSize(s) },
+            {
+              title: '操作',
+              key: 'action',
+              width: 200,
+              render: (_, record) => (
+                <Space>
+                  <Popconfirm
+                    title="确认恢复？"
+                    description="恢复会覆盖当前数据，请先确认已经备份。"
+                    onConfirm={() => handleRestore(record.fileName)}
+                  >
+                    <Button size="small" type="primary" danger loading={backupLoading}>
+                      恢复
+                    </Button>
+                  </Popconfirm>
+                  <Popconfirm
+                    title="确认删除此备份？"
+                    onConfirm={() => handleDelete(record.fileName)}
+                  >
+                    <Button size="small" danger loading={backupLoading}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              ),
+            },
+          ]}
+          locale={{ emptyText: '暂无备份记录' }}
+        />
+        <Alert
+          type="warning"
+          style={{ marginTop: 12 }}
+          message="恢复操作会覆盖当前数据库数据，执行前请确认已备份最新数据。"
+          showIcon
+        />
+      </Card>
       
       {/* 统计摘要 */}
       <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
@@ -498,6 +615,15 @@ const RepairmanRatingTable = ({ data }) => {
   ) : (
     <div style={{ textAlign: 'center', padding: '50px 0', color: '#999' }}>暂无数据</div>
   );
+};
+
+const formatSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '-';
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
 };
 
 export default DataAnalysis;

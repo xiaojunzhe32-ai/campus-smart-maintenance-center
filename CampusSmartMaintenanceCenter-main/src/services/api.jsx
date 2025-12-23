@@ -308,6 +308,19 @@ const api = {
 
     // 新增：获取工单状态统计
     getStatsOrderStatus: () => request("/admin/stats/status"),
+
+    // 备份相关接口
+    createBackup: () => request("/admin/backup/create", { method: "POST" }),
+    listBackups: () => request("/admin/backup/list"),
+    restoreBackup: (fileName) =>
+      request("/admin/backup/restore", {
+        method: "POST",
+        body: JSON.stringify({ fileName }),
+      }),
+    deleteBackup: (fileName) =>
+      request(`/admin/backup/${encodeURIComponent(fileName)}`, {
+        method: "DELETE",
+      }),
   },
 
   common: {
